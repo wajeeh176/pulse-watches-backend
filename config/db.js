@@ -34,7 +34,28 @@ const connectDB = async () => {
       return mongoose.connection;
     })
     .catch((error) => {
+      // Enhanced error logging for Vercel/serverless troubleshooting
       console.error('MongoDB connection error:', error);
+      if (error && error.message) {
+        console.error('MongoDB error message:', error.message);
+      }
+      if (error && error.stack) {
+        console.error('MongoDB error stack:', error.stack);
+      }
+      if (error && error.name) {
+        console.error('MongoDB error name:', error.name);
+      }
+      if (error && error.reason) {
+        console.error('MongoDB error reason:', error.reason);
+      }
+      if (error && error.code) {
+        console.error('MongoDB error code:', error.code);
+      }
+      if (process.env.MONGO_URI) {
+        console.error('MONGO_URI is set. Length:', process.env.MONGO_URI.length);
+      } else {
+        console.error('MONGO_URI is NOT set!');
+      }
       connectionPromise = null;
       isConnected = false;
       throw error;
