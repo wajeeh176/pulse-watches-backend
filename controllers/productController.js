@@ -6,6 +6,16 @@ const cache = new NodeCache({ stdTTL: 300 });
 
 exports.getProducts = async (req, res) => {
   try {
+    // Check MongoDB connection
+    const mongoose = require('mongoose');
+    if (mongoose.connection.readyState !== 1) {
+      console.error('MongoDB not connected. ReadyState:', mongoose.connection.readyState);
+      return res.status(503).json({ 
+        message: 'Database connection unavailable',
+        readyState: mongoose.connection.readyState
+      });
+    }
+    
     // Check if we have a cached response
     const cacheKey = 'all_products';
     const cachedProducts = cache.get(cacheKey);
@@ -50,7 +60,23 @@ exports.getProducts = async (req, res) => {
     res.json(products || []);
   } catch (error) {
     console.error('Error fetching products:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    
+    // Check for specific MongoDB errors
+    if (error.name === 'MongoServerError' || error.name === 'MongooseError') {
+      return res.status(503).json({ 
+        message: 'Database error',
+        error: process.env.NODE_ENV !== 'production' ? error.message : undefined
+      });
+    }
+    
+    // Send more detailed error in development, generic in production
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined
+    });
   }
 };
 

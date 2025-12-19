@@ -14,30 +14,11 @@ dotenv.config();
 const app = express();
 
 // CORS configuration - MUST come before routes
-// Define allowed origins
-const defaultOrigins = [
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'https://pulse-watches.netlify.app',
-  'https://pulsewatches.pk' // Add your custom domain if you have one
-];
-
-// Get additional origins from environment variable
-const envOrigins = process.env.CLIENT_URL 
-  ? process.env.CLIENT_URL.split(',').map(url => url.trim()).filter(url => url)
-  : [];
-
-// Combine and remove duplicates
-const allowedOrigins = [...new Set([...defaultOrigins, ...envOrigins])];
-
-console.log('CORS: Allowed origins configured:', allowedOrigins);
-console.log('CORS: NODE_ENV:', process.env.NODE_ENV);
-
+// In development, allow all localhost origins; in production, use CLIENT_URL
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) {
-      console.log('CORS: Allowing request with no origin');
       return callback(null, true);
     }
     
@@ -49,21 +30,33 @@ const corsOptions = {
       }
     }
     
-    // Check if origin is in allowed list
-    if (allowedOrigins.includes(origin)) {
+    // In production, check against allowed origins
+    const defaultOrigins = [
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'https://pulse-watches.netlify.app',
+      'https://pulsewatches.pk' // Add your custom domain if you have one
+    ];
+    
+    const allowedOrigins = process.env.CLIENT_URL 
+      ? [...process.env.CLIENT_URL.split(',').map(url => url.trim()), ...defaultOrigins]
+      : defaultOrigins;
+    
+    // Remove duplicates
+    const uniqueOrigins = [...new Set(allowedOrigins)];
+    
+    if (uniqueOrigins.includes(origin)) {
       console.log('CORS: Allowing origin:', origin);
       callback(null, true);
     } else {
       console.log('CORS blocked origin:', origin);
-      console.log('CORS: Allowed origins are:', allowedOrigins);
-      callback(new Error(`Not allowed by CORS. Origin: ${origin}`));
+      console.log('Allowed origins:', uniqueOrigins);
+      callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  maxAge: 86400 // 24 hours
+  allowedHeaders: ['Content-Type', 'Authorization']
 };
 
 app.use(cors(corsOptions));
@@ -88,6 +81,40 @@ app.use(helmet({
 // Compression middleware
 app.use(compression());
 
+// Test products endpoint - simple version to debug (before main routes)
+app.get('/api/products/test', async (req, res) => {
+  try {
+    const mongoose = require('mongoose');
+    const Product = require('./models/Product');
+    
+    const dbStatus = mongoose.connection.readyState;
+    
+    if (dbStatus !== 1) {
+      return res.status(503).json({ 
+        error: 'Database not connected',
+        readyState: dbStatus
+      });
+    }
+    
+    const count = await Product.countDocuments();
+    const sample = await Product.findOne().lean();
+    
+    res.json({
+      success: true,
+      database: 'connected',
+      productCount: count,
+      sampleProduct: sample || null
+    });
+  } catch (error) {
+    console.error('Test endpoint error:', error);
+    res.status(500).json({
+      error: error.message,
+      name: error.name,
+      stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+    });
+  }
+});
+
 // API Routes - must come before static files
 app.use('/api/products', productRoutes);
 app.use('/api/auth', authRoutes);
@@ -97,7 +124,24 @@ app.use('/api/payments', paymentRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Server is running' });
+  const mongoose = require('mongoose');
+  const dbStatus = mongoose.connection.readyState;
+  const dbStates = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting'
+  };
+  
+  res.json({ 
+    status: dbStatus === 1 ? 'ok' : 'degraded',
+    message: 'Server is running',
+    database: {
+      status: dbStates[dbStatus] || 'unknown',
+      readyState: dbStatus
+    },
+    timestamp: new Date().toISOString()
+  });
 });
 
 // 404 handler for API routes
