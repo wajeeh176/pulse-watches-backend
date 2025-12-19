@@ -14,11 +14,30 @@ dotenv.config();
 const app = express();
 
 // CORS configuration - MUST come before routes
-// In development, allow all localhost origins; in production, use CLIENT_URL
+// Define allowed origins
+const defaultOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'https://pulse-watches.netlify.app',
+  'https://pulsewatches.pk' // Add your custom domain if you have one
+];
+
+// Get additional origins from environment variable
+const envOrigins = process.env.CLIENT_URL 
+  ? process.env.CLIENT_URL.split(',').map(url => url.trim()).filter(url => url)
+  : [];
+
+// Combine and remove duplicates
+const allowedOrigins = [...new Set([...defaultOrigins, ...envOrigins])];
+
+console.log('CORS: Allowed origins configured:', allowedOrigins);
+console.log('CORS: NODE_ENV:', process.env.NODE_ENV);
+
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) {
+      console.log('CORS: Allowing request with no origin');
       return callback(null, true);
     }
     
@@ -30,21 +49,21 @@ const corsOptions = {
       }
     }
     
-    // In production, check against allowed origins
-    const allowedOrigins = process.env.CLIENT_URL 
-      ? process.env.CLIENT_URL.split(',').map(url => url.trim())
-      : ['http://localhost:5173', 'http://localhost:5174'];
-    
+    // Check if origin is in allowed list
     if (allowedOrigins.includes(origin)) {
+      console.log('CORS: Allowing origin:', origin);
       callback(null, true);
     } else {
       console.log('CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
+      console.log('CORS: Allowed origins are:', allowedOrigins);
+      callback(new Error(`Not allowed by CORS. Origin: ${origin}`));
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400 // 24 hours
 };
 
 app.use(cors(corsOptions));
