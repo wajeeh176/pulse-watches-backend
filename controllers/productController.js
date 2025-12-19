@@ -1,18 +1,19 @@
 const Product = require('../models/Product');
 const NodeCache = require('node-cache');
+const { ensureConnection } = require('../config/db');
 
 // Initialize cache with 5 minute TTL
 const cache = new NodeCache({ stdTTL: 300 });
 
 exports.getProducts = async (req, res) => {
   try {
-    // Check MongoDB connection
-    const mongoose = require('mongoose');
-    if (mongoose.connection.readyState !== 1) {
-      console.error('MongoDB not connected. ReadyState:', mongoose.connection.readyState);
+    // Ensure MongoDB connection is established (critical for serverless)
+    const connected = await ensureConnection();
+    if (!connected) {
+      console.error('MongoDB connection failed');
       return res.status(503).json({ 
         message: 'Database connection unavailable',
-        readyState: mongoose.connection.readyState
+        readyState: require('mongoose').connection.readyState
       });
     }
     

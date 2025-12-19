@@ -84,15 +84,15 @@ app.use(compression());
 // Test products endpoint - simple version to debug (before main routes)
 app.get('/api/products/test', async (req, res) => {
   try {
-    const mongoose = require('mongoose');
+    const { ensureConnection } = require('./config/db');
     const Product = require('./models/Product');
     
-    const dbStatus = mongoose.connection.readyState;
-    
-    if (dbStatus !== 1) {
+    // Ensure connection is established
+    const connected = await ensureConnection();
+    if (!connected) {
       return res.status(503).json({ 
-        error: 'Database not connected',
-        readyState: dbStatus
+        error: 'Database connection unavailable',
+        readyState: require('mongoose').connection.readyState
       });
     }
     
